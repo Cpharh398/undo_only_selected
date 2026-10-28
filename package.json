@@ -1,0 +1,102 @@
+{
+  "name": "undo-only-selected",
+  "displayName": "undo_only_selected",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.140.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": ["*"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "selection-undo.undoSelection",
+        "title": "Undo Only Selected"
+      },
+      {
+        "command": "selection-undo.redoSelection",
+        "title": "Redo Selected Lines"
+      },
+      {
+        "command": "selection-undo.undoCurrentLine",
+        "title": "Undo Current Line"
+      },
+      {
+        "command": "selection-undo.redoCurrentLine",
+        "title": "Redo Current Line"
+      }
+    ],
+    "menus": {
+    "editor/context": [
+      {
+        "command": "selection-undo.undoSelection",
+        "group": "modification"
+      },
+      {
+        "command": "selection-undo.redoSelection",
+        "group": "modification"
+      },
+      {
+        "command": "selection-undo.undoCurrentLine",
+        "group": "modification"
+      },
+      {
+        "command": "selection-undo.redoCurrentLine",
+        "group": "modification"
+      }
+    ]
+  },
+  "keybindings": [
+    {
+      "command": "selection-undo.undoSelection",
+      "key": "ctrl+alt+u",
+      "mac": "ctrl+cmd+u",
+      "when": "editorTextFocus && editorHasSelection"
+    },
+    {
+      "command": "selection-undo.redoSelection",
+      "key": "ctrl+alt+r",
+      "mac": "ctrl+cmd+r",
+      "when": "editorTextFocus && editorHasSelection"
+    },
+    {
+      "command": "selection-undo.undoCurrentLine",
+      "key": "ctrl+alt+shift+u",
+      "mac": "ctrl+cmd+shift+u",
+      "when": "editorTextFocus"
+    },
+    {
+      "command": "selection-undo.redoCurrentLine",
+      "key": "ctrl+alt+shift+r",
+      "mac": "ctrl+cmd+shift+r",
+      "when": "editorTextFocus"
+    }
+  ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.140.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "typescript-eslint": "^8.61.1",
+    "eslint": "^10.5.0",
+    "typescript": "^6.0.3",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  }
+}

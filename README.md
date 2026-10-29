@@ -16,7 +16,7 @@ https://github.com/user-attachments/assets/6ef26c67-6b83-49fe-acac-1deb39608ddd
 
 ## Install
 
-1. Download the latest `.vsix` file from the project's [GitHub Releases](https://github.com/Cpharh398/undo_only_selected/releases) page. If it is shared in the repository instead, open the `.vsix` file there and select **Download raw file**.
+1. Download the latest `.vsix` file from the project's page. Open the `.vsix` file and select **Download raw file**.
 2. In VS Code, open the Command Palette (`Ctrl+Shift+P` on Windows/Linux or `Command+Shift+P` on macOS).
 3. Run **Extensions: Install from VSIX…** and select the downloaded file.
 4. Reload VS Code if prompted.

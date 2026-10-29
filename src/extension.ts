@@ -3,7 +3,7 @@ import { findSelectionUndo, type HistorySnapshot } from './undo';
 import { handleDocumentClose, handleDocumentOpen } from './documentLifecycle';
 
 const maxHistoryEntries = 100;
-const typingGroupPauseMs = 200;
+const typingGroupPauseMs = 800;
 
 interface ActiveTypingGroup {
     id: number;

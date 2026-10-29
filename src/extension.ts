@@ -1,31 +1,95 @@
 import * as vscode from 'vscode';
-import { findSelectionUndo } from './undo';
+import { findSelectionUndo, type HistorySnapshot } from './undo';
 import { handleDocumentClose, handleDocumentOpen } from './documentLifecycle';
 
-// Each entry is the document text immediately before a user edit or history command.
 const maxHistoryEntries = 100;
+const typingGroupPauseMs = 200;
 
-const history = new Map<string, string[]>();
-const redoHistory = new Map<string, string[]>();
+interface ActiveTypingGroup {
+    id: number;
+    operation: 'insert' | 'delete';
+    expectedOffset: number;
+    lastEditAt: number;
+}
+
+const history = new Map<string, HistorySnapshot[]>();
+const redoHistory = new Map<string, HistorySnapshot[]>();
 const knownText = new Map<string, string>();
 const pendingHistoryText = new Map<string, string>();
+const activeTypingGroups = new Map<string, ActiveTypingGroup>();
+let nextHistoryGroupId = 0;
 
-function appendSnapshot(snapshotsByDocument: Map<string, string[]>, uri: string, text: string): void {
+function createHistoryGroupId(): number {
+    nextHistoryGroupId++;
+    return nextHistoryGroupId;
+}
+
+function appendSnapshot(
+    snapshotsByDocument: Map<string, HistorySnapshot[]>,
+    uri: string,
+    text: string,
+    groupId: number,
+): void {
     const snapshots = snapshotsByDocument.get(uri) ?? [];
-    snapshots.push(text);
+    // Keep one document snapshot per undo group, even when typing generated
+    // many individual document-change events.
+    if (snapshots[snapshots.length - 1]?.groupId !== groupId) {
+        snapshots.push({ text, groupId });
+    }
     if (snapshots.length > maxHistoryEntries) {snapshots.shift();}
     snapshotsByDocument.set(uri, snapshots);
+}
+
+function getHistoryGroupId(event: vscode.TextDocumentChangeEvent, previousText: string, uri: string): number {
+    const changes = event.contentChanges;
+    if (event.reason !== undefined || changes.length !== 1) {
+        activeTypingGroups.delete(uri);
+        return createHistoryGroupId();
+    }
+
+    const change = changes[0];
+    let operation: ActiveTypingGroup['operation'];
+    let expectedOffset: number;
+    if (change.rangeLength === 0 && change.text.length === 1 && change.text !== '\n' && change.text !== '\r') {
+        operation = 'insert';
+        expectedOffset = change.rangeOffset + change.text.length;
+    } else if (change.text === '' && change.rangeLength === 1) {
+        const removedCharacter = previousText.slice(change.rangeOffset, change.rangeOffset + change.rangeLength);
+        if (removedCharacter.length !== 1 || removedCharacter === '\n' || removedCharacter === '\r') {
+            activeTypingGroups.delete(uri);
+            return createHistoryGroupId();
+        }
+        operation = 'delete';
+        expectedOffset = change.rangeOffset;
+    } else {
+        activeTypingGroups.delete(uri);
+        return createHistoryGroupId();
+    }
+
+    const now = Date.now();
+    const previousGroup = activeTypingGroups.get(uri);
+    const continuesPreviousGroup = previousGroup !== undefined
+        && previousGroup.operation === operation
+        && now - previousGroup.lastEditAt <= typingGroupPauseMs
+        && (operation === 'insert'
+            ? change.rangeOffset === previousGroup.expectedOffset
+            : change.rangeOffset === previousGroup.expectedOffset
+                || change.rangeOffset + change.rangeLength === previousGroup.expectedOffset);
+    const groupId = continuesPreviousGroup ? previousGroup.id : createHistoryGroupId();
+
+    activeTypingGroups.set(uri, { id: groupId, operation, expectedOffset, lastEditAt: now });
+    return groupId;
 }
 
 async function applyHistoryCommand(
     editor: vscode.TextEditor,
     range: vscode.Range,
-    sourceHistory: Map<string, string[]>,
-    destinationHistory: Map<string, string[]>,
+    sourceHistory: Map<string, HistorySnapshot[]>,
+    destinationHistory: Map<string, HistorySnapshot[]>,
     action: 'undo' | 'redo',
-    extendEmptyFinalLine = false,
 ): Promise<void> {
     const uri = editor.document.uri.toString();
+    activeTypingGroups.delete(uri);
     const snapshots = sourceHistory.get(uri);
     if (!snapshots || snapshots.length === 0) {
         vscode.window.showInformationMessage(`There is no earlier ${action} for this document.`);
@@ -35,12 +99,7 @@ async function applyHistoryCommand(
     const currentText = editor.document.getText();
     const selectionStart = editor.document.offsetAt(range.start);
     const selectionEnd = editor.document.offsetAt(range.end);
-    // An empty final line may only expose its preceding delimiter. Extend the
-    // history lookup boundary so edits at the end of that line can be recovered.
-    const historySelectionEnd = extendEmptyFinalLine
-        ? selectionEnd + 1
-        : selectionEnd;
-    const result = findSelectionUndo(currentText, snapshots, selectionStart, historySelectionEnd);
+    const result = findSelectionUndo(currentText, snapshots, selectionStart, selectionEnd);
     const currentRangeText = editor.document.getText(range);
 
     if (result.text === currentRangeText) {
@@ -60,25 +119,10 @@ async function applyHistoryCommand(
         return;
     }
 
-    appendSnapshot(destinationHistory, uri, currentText);
+    appendSnapshot(destinationHistory, uri, currentText, createHistoryGroupId());
     for (const index of result.historyIndexes) {snapshots.splice(index, 1);}
     if (snapshots.length === 0) {sourceHistory.delete(uri);}
     knownText.set(uri, editor.document.getText());
-}
-
-function currentLineRange(document: vscode.TextDocument, lineNumber: number): vscode.Range {
-    const line = document.lineAt(lineNumber);
-    if (line.text.length > 0 || lineNumber < document.lineCount - 1) {
-        return line.rangeIncludingLineBreak;
-    }
-
-    if (lineNumber > 0) {
-        // An empty final line has no text or following delimiter, so include
-        // its preceding line break to give history mapping a nonempty range.
-        return new vscode.Range(document.lineAt(lineNumber - 1).range.end, line.range.end);
-    }
-
-    return line.range;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -97,10 +141,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(document => {
             const uri = document.uri.toString();
+            activeTypingGroups.delete(uri);
             handleDocumentOpen(uri, document.getText(), { history, redoHistory, knownText, pendingHistoryText });
         }),
         vscode.workspace.onDidCloseTextDocument(document => {
             const uri = document.uri.toString();
+            activeTypingGroups.delete(uri);
             handleDocumentClose(uri, { history, redoHistory, knownText, pendingHistoryText });
         }),
         vscode.workspace.onDidChangeTextDocument(event => {
@@ -108,18 +154,38 @@ export function activate(context: vscode.ExtensionContext) {
             const current = event.document.getText();
             const expectedHistoryText = pendingHistoryText.get(uri);
 
-            // Edits initiated by these commands are handled below. A user edit,
-            // however, starts a new branch and clears any redo history.
             if (expectedHistoryText === current) {
                 pendingHistoryText.delete(uri);
+                activeTypingGroups.delete(uri);
             } else {
                 redoHistory.delete(uri);
                 const previous = knownText.get(uri);
                 if (previous !== undefined && previous !== current) {
-                    appendSnapshot(history, uri, previous);
+                    const groupId = getHistoryGroupId(event, previous, uri);
+                    appendSnapshot(history, uri, previous, groupId);
+                } else {
+                    activeTypingGroups.delete(uri);
                 }
             }
             knownText.set(uri, current);
+        }),
+        vscode.window.onDidChangeTextEditorSelection(event => {
+            const uri = event.textEditor.document.uri.toString();
+            const activeGroup = activeTypingGroups.get(uri);
+            if (!activeGroup) {return;}
+
+            if (
+                event.kind === vscode.TextEditorSelectionChangeKind.Mouse
+                || event.kind === vscode.TextEditorSelectionChangeKind.Command
+                || event.selections.length !== 1
+                || !event.selections[0].isEmpty
+            ) {
+                activeTypingGroups.delete(uri);
+                return;
+            }
+
+            const activeOffset = event.textEditor.document.offsetAt(event.selections[0].active);
+            if (activeOffset !== activeGroup.expectedOffset) {activeTypingGroups.delete(uri);}
         }),
         vscode.commands.registerCommand('selection-undo.undoSelection', async () => {
             const editor = vscode.window.activeTextEditor;
@@ -142,24 +208,6 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             await applyHistoryCommand(editor, selection, redoHistory, history, 'redo');
-        }),
-        vscode.commands.registerCommand('selection-undo.undoCurrentLine', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) {return;}
-            const lineNumber = editor.selection.active.line;
-            const line = editor.document.lineAt(lineNumber);
-            const range = currentLineRange(editor.document, lineNumber);
-            const extendEmptyFinalLine = line.text.length === 0 && lineNumber === editor.document.lineCount - 1;
-            await applyHistoryCommand(editor, range, history, redoHistory, 'undo', extendEmptyFinalLine);
-        }),
-        vscode.commands.registerCommand('selection-undo.redoCurrentLine', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) {return;}
-            const lineNumber = editor.selection.active.line;
-            const line = editor.document.lineAt(lineNumber);
-            const range = currentLineRange(editor.document, lineNumber);
-            const extendEmptyFinalLine = line.text.length === 0 && lineNumber === editor.document.lineCount - 1;
-            await applyHistoryCommand(editor, range, redoHistory, history, 'redo', extendEmptyFinalLine);
         }),
     );
 }

@@ -3,42 +3,51 @@ export interface SelectionUndo {
     historyIndexes: number[];
 }
 
+export interface HistorySnapshot {
+    text: string;
+    groupId: number;
+}
+
 /** Find the prior selected text and history entries that contributed to it. */
 export function findSelectionUndo(
     currentText: string,
-    snapshots: readonly string[],
+    snapshots: readonly HistorySnapshot[],
     selectionStart: number,
     selectionEnd: number,
 ): SelectionUndo {
     let selectedRange = { start: selectionStart, end: selectionEnd };
     let workingText = currentText;
     let restoredText = currentText.slice(selectionStart, selectionEnd);
-    const historyIndexes: number[] = [];
+    let index = snapshots.length - 1;
 
-    for (let index = snapshots.length - 1; index >= 0; index--) {
-        const candidateText = snapshots[index];
-        const candidateRange = mapSelectionToPreviousText(
-            workingText,
-            candidateText,
-            selectedRange.start,
-            selectedRange.end,
-        );
-        const candidateSelection = candidateText.slice(candidateRange.start, candidateRange.end);
-        if (candidateSelection === restoredText) {
-            // Ignore edits elsewhere in the document until a selected edit is found.
+    while (index >= 0) {
+        const groupId = snapshots[index].groupId;
+        const textBeforeGroup = restoredText;
+        const groupIndexes: number[] = [];
+
+        while (index >= 0 && snapshots[index].groupId === groupId) {
+            const candidateText = snapshots[index].text;
+            const candidateRange = mapSelectionToPreviousText(
+                workingText,
+                candidateText,
+                selectedRange.start,
+                selectedRange.end,
+            );
+            restoredText = candidateText.slice(candidateRange.start, candidateRange.end);
             selectedRange = candidateRange;
             workingText = candidateText;
-            if (historyIndexes.length > 0) {break;}
-            continue;
+            groupIndexes.push(index);
+            index--;
         }
 
-        restoredText = candidateSelection;
-        selectedRange = candidateRange;
-        workingText = candidateText;
-        historyIndexes.push(index);
+        // Skip edit groups that only changed text outside the selected range.
+        // Undo the newest group that changed the selected text, one group per command.
+        if (restoredText !== textBeforeGroup) {
+            return { text: restoredText, historyIndexes: groupIndexes };
+        }
     }
 
-    return { text: restoredText, historyIndexes };
+    return { text: currentText.slice(selectionStart, selectionEnd), historyIndexes: [] };
 }
 
 function mapSelectionToPreviousText(

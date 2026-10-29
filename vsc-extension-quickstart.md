@@ -1,15 +1,13 @@
 # Undo Only Selected: Quickstart
 
-Undo or redo edits in a selected range, or work on the line containing the cursor. Commands are available from the Command Palette and the editor context menu.
+Undo or redo edits in a selected range. Commands are available from the Command Palette and the editor context menu.
 
 ## Commands and shortcuts
 
 | Command | How to use it | macOS | Windows/Linux |
 | --- | --- | --- | --- |
-| Undo Only Selected | Select text or lines, then run the command. | `Control+Command+U` | `Ctrl+Alt+U` |
-| Redo Selected Lines | Select the same text or lines you undid, then run the command. | `Control+Command+R` | `Ctrl+Alt+R` |
-| Undo Current Line | Place the cursor on the line. | `Control+Command+Shift+U` | `Ctrl+Alt+Shift+U` |
-| Redo Current Line | Place the cursor on the line you want to redo. | `Control+Command+Shift+R` | `Ctrl+Alt+Shift+R` |
+| Undo Only Selected | Select text or lines, then run the command to undo the latest edit group affecting that range. | `Control+Command+U` | `Ctrl+Alt+U` |
+| Redo Selected Lines | Select the same text or lines you undid, then run the command to redo that edit group. | `Control+Command+R` | `Ctrl+Alt+R` |
 
 Change shortcuts in **Preferences: Open Keyboard Shortcuts**.
 

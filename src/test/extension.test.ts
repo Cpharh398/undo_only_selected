@@ -4,8 +4,6 @@ import { handleDocumentClose, handleDocumentOpen } from '../documentLifecycle';
 
 const command = 'selection-undo.undoSelection';
 const redoSelectionCommand = 'selection-undo.redoSelection';
-const undoCurrentLineCommand = 'selection-undo.undoCurrentLine';
-const redoCurrentLineCommand = 'selection-undo.redoCurrentLine';
 
 suite('Undo Only Selected', () => {
 	async function activateExtension() {
@@ -78,26 +76,6 @@ suite('Undo Only Selected', () => {
 		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ content: '' }));
 	});
 
-	test('undoes and redoes the line containing the cursor', async () => {
-		await activateExtension();
-		const document = await vscode.workspace.openTextDocument({
-			language: 'plaintext',
-			content: 'original\nuntouched',
-		});
-		const editor = await vscode.window.showTextDocument(document);
-
-		await editor.edit(edit => {
-			edit.replace(document.lineAt(0).range, 'rewritten');
-		});
-		editor.selection = new vscode.Selection(0, 3, 0, 3);
-		await vscode.commands.executeCommand(undoCurrentLineCommand);
-		assert.strictEqual(document.getText(), 'original\nuntouched');
-
-		await vscode.commands.executeCommand(redoCurrentLineCommand);
-		assert.strictEqual(document.getText(), 'rewritten\nuntouched');
-		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ content: '' }));
-	});
-
 	test('clears redo history when a new edit is made', async () => {
 		await activateExtension();
 		const document = await vscode.workspace.openTextDocument({
@@ -106,53 +84,21 @@ suite('Undo Only Selected', () => {
 		});
 		const editor = await vscode.window.showTextDocument(document);
 		await editor.edit(edit => edit.replace(document.lineAt(0).range, 'rewritten'));
-		editor.selection = new vscode.Selection(0, 0, 0, 0);
-		await vscode.commands.executeCommand(undoCurrentLineCommand);
+		editor.selection = new vscode.Selection(0, 0, 0, document.lineAt(0).text.length);
+		await vscode.commands.executeCommand(command);
+		assert.strictEqual(document.getText(), 'original\nuntouched');
 
 		await editor.edit(edit => edit.replace(document.lineAt(0).range, 'new edit'));
-		await vscode.commands.executeCommand(redoCurrentLineCommand);
+		editor.selection = new vscode.Selection(0, 0, 0, document.lineAt(0).text.length);
+		await vscode.commands.executeCommand(redoSelectionCommand);
 		assert.strictEqual(document.getText(), 'new edit\nuntouched');
-		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ content: '' }));
-	});
-
-	test('undoes and redoes a line inserted into an empty document', async () => {
-		await activateExtension();
-		const document = await vscode.workspace.openTextDocument({
-			language: 'plaintext',
-			content: '',
-		});
-		const editor = await vscode.window.showTextDocument(document);
-		await editor.edit(edit => edit.insert(new vscode.Position(0, 0), 'typed line'));
-
-		await vscode.commands.executeCommand(undoCurrentLineCommand);
-		assert.strictEqual(document.getText(), '');
-		await vscode.commands.executeCommand(redoCurrentLineCommand);
-		assert.strictEqual(document.getText(), 'typed line');
-		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ content: '' }));
-	});
-
-	test('redoes an edit on a cleared final line', async () => {
-		await activateExtension();
-		const document = await vscode.workspace.openTextDocument({
-			language: 'plaintext',
-			content: 'previous\n',
-		});
-		const editor = await vscode.window.showTextDocument(document);
-		await editor.edit(edit => edit.insert(new vscode.Position(1, 0), 'last line'));
-		editor.selection = new vscode.Selection(1, 2, 1, 2);
-
-		await vscode.commands.executeCommand(undoCurrentLineCommand);
-		assert.strictEqual(document.getText(), 'previous\n');
-		editor.selection = new vscode.Selection(1, 0, 1, 0);
-		await vscode.commands.executeCommand(redoCurrentLineCommand);
-		assert.strictEqual(document.getText(), 'previous\nlast line');
 		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ content: '' }));
 	});
 
 	test('preserves history on close and same-content reopen', () => {
 		const uri = 'file:///sample.txt';
-		const history = new Map([[uri, ['original text']]]);
-		const redoHistory = new Map([[uri, ['redo text']]]);
+		const history = new Map([[uri, [{ text: 'original text', groupId: 1 }]]]);
+		const redoHistory = new Map([[uri, [{ text: 'redo text', groupId: 2 }]]]);
 		const knownText = new Map([[uri, 'edited text']]);
 		const pendingHistoryText = new Map([[uri, 'temporary']]);
 		const state = { history, redoHistory, knownText, pendingHistoryText };
@@ -160,16 +106,16 @@ suite('Undo Only Selected', () => {
 		handleDocumentClose(uri, state);
 		handleDocumentOpen(uri, 'edited text', state);
 
-		assert.deepStrictEqual(history.get(uri), ['original text']);
-		assert.deepStrictEqual(redoHistory.get(uri), ['redo text']);
+		assert.deepStrictEqual(history.get(uri), [{ text: 'original text', groupId: 1 }]);
+		assert.deepStrictEqual(redoHistory.get(uri), [{ text: 'redo text', groupId: 2 }]);
 		assert.strictEqual(knownText.get(uri), 'edited text');
 		assert.strictEqual(pendingHistoryText.has(uri), false);
 	});
 
 	test('discards closed-document history if its contents changed', () => {
 		const uri = 'file:///sample.txt';
-		const history = new Map([[uri, ['original text']]]);
-		const redoHistory = new Map([[uri, ['redo text']]]);
+		const history = new Map([[uri, [{ text: 'original text', groupId: 1 }]]]);
+		const redoHistory = new Map([[uri, [{ text: 'redo text', groupId: 2 }]]]);
 		const knownText = new Map([[uri, 'edited text']]);
 		const pendingHistoryText = new Map([[uri, 'temporary']]);
 		const state = { history, redoHistory, knownText, pendingHistoryText };

@@ -1,6 +1,8 @@
+import type { HistorySnapshot } from './undo';
+
 export interface DocumentLifecycleState {
-    history: Map<string, string[]>;
-    redoHistory: Map<string, string[]>;
+    history: Map<string, HistorySnapshot[]>;
+    redoHistory: Map<string, HistorySnapshot[]>;
     knownText: Map<string, string>;
     pendingHistoryText: Map<string, string>;
 }

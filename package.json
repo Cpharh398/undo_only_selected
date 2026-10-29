@@ -2,14 +2,18 @@
   "name": "undo-only-selected",
   "displayName": "undo_only_selected",
   "description": "",
-  "version": "0.0.1",
+  "version": "0.0.3",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cpharh398/undo_only_selected.git"
+  },
   "engines": {
     "vscode": "^1.140.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": ["*"],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -20,14 +24,6 @@
       {
         "command": "selection-undo.redoSelection",
         "title": "Redo Selected Lines"
-      },
-      {
-        "command": "selection-undo.undoCurrentLine",
-        "title": "Undo Current Line"
-      },
-      {
-        "command": "selection-undo.redoCurrentLine",
-        "title": "Redo Current Line"
       }
     ],
     "menus": {
@@ -38,14 +34,6 @@
       },
       {
         "command": "selection-undo.redoSelection",
-        "group": "modification"
-      },
-      {
-        "command": "selection-undo.undoCurrentLine",
-        "group": "modification"
-      },
-      {
-        "command": "selection-undo.redoCurrentLine",
         "group": "modification"
       }
     ]
@@ -62,18 +50,6 @@
       "key": "ctrl+alt+r",
       "mac": "ctrl+cmd+r",
       "when": "editorTextFocus && editorHasSelection"
-    },
-    {
-      "command": "selection-undo.undoCurrentLine",
-      "key": "ctrl+alt+shift+u",
-      "mac": "ctrl+cmd+shift+u",
-      "when": "editorTextFocus"
-    },
-    {
-      "command": "selection-undo.redoCurrentLine",
-      "key": "ctrl+alt+shift+r",
-      "mac": "ctrl+cmd+shift+r",
-      "when": "editorTextFocus"
     }
   ]
   },

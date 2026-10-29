@@ -10,9 +10,6 @@ Undo or redo edits for selected text or lines without changing unrelated parts o
 
 ## Demo
 
-[Watch the demo video]
-
-
 https://github.com/user-attachments/assets/6ef26c67-6b83-49fe-acac-1deb39608ddd
 
 
